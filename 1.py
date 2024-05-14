@@ -6,9 +6,12 @@ import threading
 from functools import wraps
 from cachetools import TTLCache
 
+
 bot = telebot.TeleBot('7018618926:AAEadbtQEiwryYeHCzc3SRsciEtIe0i55U4')
 authorized_ids = set()
 cache = TTLCache(maxsize=100, ttl=60)
+
+function_number = 0
 
 def edit_message(chat_id, message_id, new_text):
     bot.edit_message_text(new_text, chat_id, message_id, parse_mode="html")
@@ -24,9 +27,10 @@ def authorized_only(func):
         if cache.get(user_id):
             return func(*args, **kwargs)
         else:
-            msg = bot.send_message(args[0].chat.id, "<b>Доступ запрещен.</b>", parse_mode="html")
+            msg = bot.send_message(args[0].chat.id, "<b>Доступ запрещен.</b>\U0000274C", parse_mode="html")
             bot.delete_message(args[0].chat.id, args[0].message_id)
             threading.Timer(2.0, bot.delete_message, (msg.chat.id, msg.message_id)).start()
+            time.sleep(2.0)
             return
     return wrapper
 
@@ -63,6 +67,7 @@ def update_user_message_count(chat_id, message_count):
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    global mm
     # Получение количества отправленных сообщений пользователем
     message_count = get_user_message_count(message.chat.id)
 
@@ -71,60 +76,105 @@ def start(message):
 
     # Увеличение счетчика сообщений пользователя
     update_user_message_count(message.chat.id, message_count + 1)
-
-    # Приветственное сообщение
-    if message_count == 0:
-        bot.send_message(message.chat.id, f"<b>Добро пожаловать, <a href='tg://user?id={message.from_user.id}'>\
-{message.from_user.first_name}</a>!</b>", parse_mode="html")
     admins = set()
-    bot.delete_message(message.chat.id, message.message_id)  # Удаление сообщения
     with open("Admins.txt", "r") as f:
         admins = {int(line.strip()) for line in f}
     for admin_id in admins:
         cache[admin_id] = True
     user_id = message.from_user.id
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
     if not cache.get(user_id):
-        msg2 = bot.send_message(message.chat.id, "<b>Доступ запрещен.</b>", parse_mode="html")
+        msg2 = bot.send_message(message.chat.id, "<b>Доступ запрещен</b>\U0000274C", parse_mode="html")
+        update_user_message_count(message.chat.id, message_count = "0")
+        time.sleep(2.0)
+        try:
+            bot.delete_message(mm.chat.id, mm.message_id)
+        except Exception:
+            pass
         threading.Timer(2.0, bot.delete_message, (msg2.chat.id, msg2.message_id)).start()
         return
+        # Приветственное сообщение
+    if message_count == 0:
+        bot.send_message(message.chat.id, f"<b>Добро пожаловать, <a href='tg://user?id={message.from_user.id}'>\
+{message.from_user.first_name}</a>!</b>", parse_mode="html")
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     buttons = [types.KeyboardButton(btn) for btn in ["Ссылка", "Статистика", "Администраторы"]]
     keyboard.add(*buttons)
-
-    mm = bot.send_message(message.chat.id, "<b>Выберите действие:</b>", reply_markup=keyboard, parse_mode="html",
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+    mm = bot.send_message(message.chat.id, "<b>Выберите действие</b>", reply_markup=keyboard, parse_mode="html",
                           disable_notification=True)
-
-    time.sleep(2.0)
-    bot.delete_message(mm.chat.id, mm.message_id)
 
 @bot.message_handler(func=lambda message: message.text == "Ссылка")
 @authorized_only
 def link(message):
     global msg_link
-    link_edit = open('Link_edit.txt', 'r').read()
-    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-    buttons = [types.KeyboardButton(btn) for btn in ["Изменить ссылку", "Назад"]]
-    keyboard.add(*buttons)
-    bot.delete_message(message.chat.id, message.message_id)
-    # Удаляем HTML-разметку из текста сообщения
-    link_edit_without_html = link_edit.replace("<b>", "").replace("</b>", "")
-    msg_link = bot.send_message(message.chat.id, f"Текущая ссылка: {link_edit_without_html}", reply_markup=keyboard)
-    #bot.register_next_step_handler(msg_link, back_link, handle_link_action)
-
-@bot.message_handler(func=lambda message: message.text == "Изменить ссылку")
-@authorized_only
-def handle_link_action(message):
-    if message.text == "Изменить ссылку":
+    with open('Link_edit.txt', 'r') as f:
+        file_content = f.read()
+    old_link = file_content.split()[0]
+    try:
         bot.delete_message(message.chat.id, message.message_id)
-        bot.delete_message(message.chat.id, msg_link.message_id)  # Удаляем сообщение со ссылкой
-        msg_link2 = bot.send_message(message.chat.id, "<b>Введите новую ссылку:</b>", parse_mode="html", reply_markup=types.ReplyKeyboardRemove())
-        threading.Timer(2.0, bot.delete_message, (msg_link2.chat.id, msg_link2.message_id)).start()
-        bot.register_next_step_handler(msg_link2, process_new_link)
+        bot.delete_message(mm.chat.id, mm.message_id)
+    except Exception:
+        pass
+    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    button_new_link = types.KeyboardButton("Изменить ссылку")
+    button_back = types.KeyboardButton("Назад")
+    keyboard.add(button_new_link, button_back)
+    msg_link = bot.send_message(message.chat.id, f"<b>Текущая ссылка на папку: {old_link}</b>",
+                           reply_markup=keyboard, disable_web_page_preview=True, parse_mode="html")
+    bot.register_next_step_handler(msg_link, handle_link_action)
+
+def handle_link_action(message):
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+    if message.text == "Изменить ссылку":
+        bot.delete_message(message.chat.id, msg_link.message_id)
+        new_link(message, reply_markup=types.ReplyKeyboardRemove())
+    elif message.text == "Назад":
+        bot.delete_message(message.chat.id, msg_link.message_id)
+        start(message)
+    else:
+        msg_error = bot.send_message(message.chat.id, "<b>Неверный выбор. Повторите попытку.</b>\U0000274C", parse_mode="html")
+        bot.delete_message(message.chat.id, msg_link.message_id)
+        threading.Timer(2.0, bot.delete_message, (msg_error.chat.id, msg_error.message_id)).start()
+        time.sleep(2.0)
+        link(message)
+
+def new_link(message, reply_markup=None):
+    global msg_new_link
+    msg_new_link = bot.send_message(message.chat.id, "<b>Введите новую ссылку:</b>", parse_mode="html",
+                           reply_markup=reply_markup)
+    bot.register_next_step_handler(msg_new_link, process_new_link)
+
+def process_new_link(message):
+    try:
+        bot.delete_message(msg_new_link.chat.id, msg_new_link.message_id)
+    except Exception:
+        pass
+    new_link = message.text
+    with open('Link_edit.txt', 'w') as f:
+        f.write(new_link)
+    msg_link_add = bot.send_message(message.chat.id, "<b>Ссылка успешно обновлена!</b>\U00002705", parse_mode="html")
+    threading.Timer(2.0, bot.delete_message, (msg_link_add.chat.id, msg_link_add.message_id)).start()
+    time.sleep(2.0)
+    link(message)
 
 @bot.message_handler(func=lambda message: message.text == "Администраторы")
 @authorized_only
 def adminss(message):
     global msg_admm
+    try:
+        bot.delete_message(mm.chat.id, mm.message_id)
+    except Exception:
+        pass
     with open("Admins.txt", "r") as f:
         admins = [line.strip() for line in f]
     admins_str = "<b>Список Администраторов:</b>\n\n"
@@ -137,83 +187,116 @@ def adminss(message):
     buttons = [types.KeyboardButton(btn) for btn in ["Добавить", "Удалить", "Назад"]]
     keyboard.add(*buttons)
     msg_admm = bot.send_message(message.chat.id, admins_str, reply_markup=keyboard, parse_mode="html")
-    bot.delete_message(message.chat.id, message.message_id)
-    #bot.register_next_step_handler(msg_admm, back_admm)
-
-@bot.message_handler(func=lambda message: message.text == "Добавить")
-@authorized_only
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+    bot.register_next_step_handler(msg_admm, handle_admm_action)
+def handle_admm_action(message):
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+    if message.text == "Добавить":
+        bot.delete_message(message.chat.id, msg_admm.message_id)
+        add_admin(message)
+    elif message.text == "Удалить":
+        del_admin(message)
+    elif message.text == "Назад":
+        bot.delete_message(message.chat.id, msg_admm.message_id)
+        start(message)
+    else:
+        msg_error = bot.send_message(message.chat.id, "<b>Неверный выбор. Повторите попытку.</b>\U0000274C", parse_mode="html")
+        bot.delete_message(message.chat.id, msg_admm.message_id)
+        threading.Timer(2.0, bot.delete_message, (msg_error.chat.id, msg_error.message_id)).start()
+        time.sleep(2.0)
+        adminss(message)
 def add_admin(message):
-    bot.delete_message(message.chat.id, msg_admm.message_id)
+    global msg_adm4
     keyboard = types.ReplyKeyboardRemove()
     msg_adm4 = bot.send_message(message.chat.id, "<b>Введите ID нового администратора:</b>", reply_markup=keyboard, parse_mode="html")
-    threading.Timer(2.0, bot.delete_message, (msg_adm4.chat.id, msg_adm4.message_id)).start()
-    bot.register_next_step_handler(message, add_admin)
-    bot.delete_message(message.chat.id, message.message_id)
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+    bot.register_next_step_handler(msg_adm4, add_admin1)
 
-@authorized_only
-def add_admin(message):
+def add_admin1(message):
+    try:
+        bot.delete_message(msg_adm4.chat.id, msg_adm4.message_id)
+    except Exception:
+        pass
     admin_id = message.text
     if not re.match("^[0-9]+$", admin_id):
-        msg_adm6 = bot.send_message(message.chat.id, "<b>ID администратора должен содержать только цифры</b>", parse_mode="html")
-        threading.Timer(2.0, bot.delete_message, (msg_adm6.chat.id, msg_adm6.message_id)).start()
+        msg_adm6 = bot.send_message(message.chat.id, "<b>ID администратора должен содержать только цифры!</b>\U0000274C", parse_mode="html")
+        threading.Timer(3.0, bot.delete_message, (msg_adm6.chat.id, msg_adm6.message_id)).start()
+        time.sleep(3.0)
+        add_admin(message)
         return
     with open("Admins.txt", "a") as f:
         f.write("\n" + admin_id)
     f.close()
     authorized_ids.add(int(admin_id))
-    msg_adm5 = bot.send_message(message.chat.id, "<b>Успешно добавлено!</b>", parse_mode="html")
+    msg_adm5 = bot.send_message(message.chat.id, "<b>Успешно добавлено!</b>\U00002705", parse_mode="html")
     threading.Timer(2.0, bot.delete_message, (msg_adm5.chat.id, msg_adm5.message_id)).start()
+    time.sleep(2.0)
     adminss(message)
 
-@bot.message_handler(func=lambda message: message.text == "Удалить")
-@authorized_only
 def del_admin(message):
+    global msg_adm3
     keyboard = types.ReplyKeyboardRemove()
     msg_adm3 = bot.send_message(message.chat.id, "<b>Введите порядковый номер администратора для удаления:</b>", reply_markup=keyboard, parse_mode="html")
-    threading.Timer(2.0, bot.delete_message, (msg_adm3.chat.id, msg_adm3.message_id)).start()
-    bot.register_next_step_handler(message, del_admin)
-    bot.delete_message(message.chat.id, message.message_id)
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+    bot.register_next_step_handler(msg_adm3, del_admin1)
 
-@authorized_only
-def del_admin(message):
+def del_admin1(message):
+    try:
+        bot.delete_message(msg_adm3.chat.id, msg_adm3.message_id)
+    except Exception:
+        pass
     admin_number = message.text
     if not re.match("^[0-9]+$", admin_number):
-        msg_adm2 = bot.send_message(message.chat.id, "<b>Порядковый номер администратора должен содержать только цифры.</b>", parse_mode="html")
-        threading.Timer(2.0, bot.delete_message, (msg_adm2.chat.id, msg_adm2.message_id)).start()
+        msg_adm2 = bot.send_message(message.chat.id, "<b>Порядковый номер администратора должен содержать только цифры.</b>\U0000274C", parse_mode="html")
+        threading.Timer(3.0, bot.delete_message, (msg_adm2.chat.id, msg_adm2.message_id)).start()
+        time.sleep(3.0)
+        del_admin(message)
         return
     admins = []
     with open("Admins.txt", "r") as f:
         admins = [line.strip() for line in f]
     index = int(admin_number) - 1
     if index < 0 or index >= len(admins):
-        msg_adm1 = bot.send_message(message.chat.id, "<b>Некорректный порядковый номер администратора</b>", parse_mode="html")
-        threading.Timer(2.0, bot.delete_message, (msg_adm1.chat.id, msg_adm1.message_id)).start()
+        msg_adm1 = bot.send_message(message.chat.id, "<b>Некорректный порядковый номер администратора</b>\U0000274C", parse_mode="html")
+        threading.Timer(3.0, bot.delete_message, (msg_adm1.chat.id, msg_adm1.message_id)).start()
+        time.sleep(3.0)
+        del_admin(message)
         return
     admin_id = admins[index]
     admins.pop(index)
     with open("Admins.txt", "w") as f:
         f.write("\n".join(admins))
-    bot.send_message(message.chat.id, "<b>Успешно удалено!</b>", parse_mode="html")
-    bot.delete_message(message.chat.id, msg_admm.message_id)
+    try:
+        bot.delete_message(message.chat.id, msg_admm.message_id)
+    except Exception:
+        pass
+    msg_del = bot.send_message(message.chat.id, "<b>Успешно удалено!\U00002705</b>", parse_mode="html")
+    threading.Timer(2.0, bot.delete_message, (msg_del.chat.id, msg_del.message_id)).start()
+    time.sleep(2.0)
     f.close()
     adminss(message)
 
-@bot.message_handler(func=lambda message: message.text == "Назад")
-def back_admm(message):
-    bot.delete_message(message.chat.id, msg_admm.message_id)
-    start(message)
-
-def back_link(message):
-        bot.delete_message(message.chat.id, msg_link.message_id)
-        start(message)
-def back_stats(message):
-        bot.delete_message(message.chat.id, msg_stats1.message_id)
-        start(message)
 
 @bot.message_handler(func=lambda message: message.text == "Статистика")
 @authorized_only
 def stats(message):
     global msg_stats1
+    try:
+        bot.delete_message(mm.chat.id, mm.message_id)
+    except Exception:
+        pass
     with open('Users.txt', 'r') as f:
         lines = f.readlines()
     stats = {"last_month": 0, "current_month": 0, "current_week": 0, "current_day": 0}
@@ -231,21 +314,30 @@ def stats(message):
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     button_back = types.KeyboardButton("Назад")
     keyboard.add(button_back)
-    bot.delete_message(message.chat.id, message.message_id)
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
     msg_stats1 = bot.send_message(message.chat.id, f"<b>Количество пользователей:\n"
                                       f"\nЗа прошлый месяц: {stats['last_month']}"
                                       f"\nЗа текущий месяц: {stats['current_month']}"
                                       f"\nЗа текущую неделю: {stats['current_week']}"
-                                      f"\nЗа текущий день: {stats['current_day']}</b>", reply_markup=keyboard, parse_mode="html")
-    bot.register_next_step_handler(msg_stats1, back_stats)
+                                      f"\nЗа текущий день: {stats['current_day']}</b>",
+                                  reply_markup=keyboard, parse_mode="html")
+    bot.register_next_step_handler(msg_stats1, handle_stats_action)
 
-@authorized_only
-def process_new_link(message):
-    new_link = message.text
-    with open('Link_edit.txt', 'w') as f:
-        f.write(new_link)
-    msg_link3 = bot.send_message(message.chat.id, "<b>Ссылка успешно обновлена!</b>", parse_mode="html")
-    threading.Timer(2.0, bot.delete_message, (msg_link3.chat.id, msg_link3.message_id)).start()
-    start(message)
+def handle_stats_action(message):
+    bot.delete_message(message.chat.id, message.message_id)
+    if message.text == "Назад":
+        bot.delete_message(message.chat.id, msg_stats1.message_id)
+        start(message)
+    elif message.text == "Назадlll":
+        pass
+    else:
+        msg_error = bot.send_message(message.chat.id, "<b>Неверный выбор. Повторите попытку.</b>\U0000274C", parse_mode="html")
+        bot.delete_message(message.chat.id, msg_stats1.message_id)
+        threading.Timer(2.0, bot.delete_message, (msg_error.chat.id, msg_error.message_id)).start()
+        time.sleep(2.0)
+        stats(message)
 
 bot.infinity_polling()
